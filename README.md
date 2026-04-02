@@ -3,7 +3,7 @@
 **A predictive, adaptive process priority daemon for Linux.**  
 ProcessSentry quietly watches your system in the background and automatically throttles processes that are hogging CPU, memory, or disk I/O, before they make your desktop feel sluggish. It learns over time which programs are repeat offenders and gets faster at reining them in. Best used with: https://github.com/bobbycomet/kernel-autotune-V2
 
-Kernel Autotune + ProcessSentry together give Ubuntu/Debian users a smoother gaming and desktop experience similar to specialized distributions. without changing your base system.
+Kernel Autotune + Process Sentry together give Ubuntu/Debian users a smoother gaming and desktop experience similar to specialized distributions. without changing your base system.
 
 ---
 
