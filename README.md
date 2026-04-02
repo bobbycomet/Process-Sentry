@@ -9,6 +9,8 @@ ProcessSentry quietly watches your system in the background and automatically th
 
 ### Install the .deb package (recommended)
 
+Download link: https://github.com/bobbycomet/Process-Sentry/releases/download/v3.0.0/sentry-pkg.deb
+
 ```bash
 sudo apt install ./sentry-pkg.deb
 ```
