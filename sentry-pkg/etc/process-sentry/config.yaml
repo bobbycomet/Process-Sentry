@@ -1,0 +1,320 @@
+# =============================================================================
+# ProcessSentry v3 — Configuration File
+# Location: /etc/process-sentry/config.yaml
+#
+# ProcessSentry is a predictive, adaptive process priority daemon that uses
+# ML-based behavior learning to throttle misbehaving processes before they
+# degrade system responsiveness. It supports cgroup v2, PSI memory pressure,
+# gaming detection, and per-device power profiles.
+#
+# All values shown here are the defaults. Uncomment and change only what you
+# need. The daemon merges this file over its built-in defaults, so omitted
+# keys fall back gracefully.
+# =============================================================================
+
+
+# -----------------------------------------------------------------------------
+# POLLING INTERVALS
+#
+# Controls how frequently ProcessSentry scans the process table.
+# The daemon automatically adjusts the active interval between `min` and `max`
+# based on observed system load (EMA-smoothed). Under high load it polls at
+# `min`; under low load it backs off toward `max`.
+# -----------------------------------------------------------------------------
+intervals:
+  # Base polling interval in seconds (default working rate)
+  base: 5.0
+
+  # Fastest allowed polling interval (triggered when load EMA > 80%)
+  min: 1.0
+
+  # Slowest allowed polling interval (triggered when load EMA < 20%)
+  max: 15.0
+
+  # Exponential Moving Average alpha for load smoothing.
+  # Higher = reacts faster to load spikes; lower = smoother but slower to respond.
+  # Range: 0.0–1.0  (0.3 is a good balance)
+  ema_alpha: 0.3
+
+
+# -----------------------------------------------------------------------------
+# THROTTLE THRESHOLDS
+#
+# A process is considered "overloaded" when it crosses ANY of these limits.
+# Thresholds are then adjusted by the process's learned habit factor and the
+# current power mode (desktop / laptop on battery / handheld).
+#
+# Mode overrides applied automatically at runtime:
+#   HANDHELD  — cpu_percent→80,  io_mbps×2.0, memory_percent→30
+#   LAPTOP    — cpu_percent→60,  io_mbps×1.3, memory_percent unchanged
+#   DESKTOP   — values used as-is from this file
+# -----------------------------------------------------------------------------
+thresholds:
+  # Per-process CPU usage (%) that triggers throttling.
+  # Measured as share of total physical cores, not per-core.
+  # Lower = more aggressive throttling. Typical desktop range: 40–70.
+  cpu_percent: 50.0
+
+  # Per-process I/O bandwidth (MB/s combined read+write) that triggers throttling.
+  # Increase for systems with NVMe or RAID storage; decrease for slow HDDs.
+  io_mbps: 25.0
+
+  # Per-process memory footprint (% of total RAM) that triggers throttling.
+  # A 16 GB system at 18% = ~2.9 GB per-process limit.
+  memory_percent: 18.0
+
+  # PSI (Pressure Stall Information) memory avg10 threshold.
+  # When /proc/pressure/memory "some avg10=X" exceeds this value the entire
+  # system is considered under memory pressure and per-process mem thresholds
+  # are cut in half for the current cycle. Set 0 to disable PSI checks.
+  # Requires kernel 4.20+ with CONFIG_PSI=y.
+  memory_pressure_avg10: 10.0
+
+
+# -----------------------------------------------------------------------------
+# PREDICTIVE THROTTLING
+#
+# Before a process visibly spikes, ProcessSentry can pre-throttle it based on
+# recent history and learned habit scores. This catches burst workloads before
+# they impact the user.
+# -----------------------------------------------------------------------------
+prediction:
+  # Number of per-process measurement samples to keep in the rolling window.
+  # Larger values smooth out short bursts; smaller react faster.
+  history_size: 10
+
+  # Habit score (0.0–1.0) above which a process is pre-throttled immediately
+  # on the next cycle, even if current metrics are within threshold.
+  # 0.75 = throttle once the process has been bad 75% of the time.
+  pre_throttle_confidence: 0.75
+
+  # Fraction of history samples that must show high CPU for pre-throttle to fire.
+  # Currently used internally to decide "trending" behaviour.
+  pattern_match_threshold: 0.8
+
+
+# -----------------------------------------------------------------------------
+# ADAPTIVE LEARNING
+#
+# ProcessSentry maintains a per-process-name habit score (0.0–1.0) that
+# accumulates when a process is throttled and decays when it behaves.
+# Higher habit scores lower the effective threshold, making re-throttling
+# faster for known offenders.
+# -----------------------------------------------------------------------------
+learning:
+  # How much the habit score rises each time a process is throttled.
+  # Higher = faster learning of bad actors. Range: 0.01–0.20.
+  up_rate: 0.08
+
+  # How much the habit score falls each polling cycle the process is NOT throttled.
+  # Keep this lower than up_rate so habits are hard to earn but slow to lose.
+  down_rate: 0.03
+
+  # Maximum value a habit score can reach (1.0 = no headroom left).
+  habit_cap: 1.0
+
+  # Passive decay subtracted from every habit every cycle, regardless of behavior.
+  # Prevents permanent blacklisting of processes that have cleaned up their act.
+  # Set to 0.0 to disable decay entirely.
+  decay_rate: 0.001
+
+
+# -----------------------------------------------------------------------------
+# CGROUP v2 INTEGRATION
+#
+# When cgroup v2 is available, ProcessSentry places throttled processes in a
+# dedicated slice (sentry.slice) and enforces hard CPU and I/O limits on top
+# of nice/ionice. This is more reliable than nice alone on modern kernels.
+#
+# Requires: cgroup v2 mounted at /sys/fs/cgroup, kernel ≥ 5.2.
+# If cgroup v2 is unavailable the daemon falls back to nice(15)/ionice silently.
+# -----------------------------------------------------------------------------
+cgroup:
+  # CPU quota (%) applied to the sentry.slice when processes are throttled.
+  # 70 means throttled processes collectively may use at most 70% of one core.
+  # Reduce for more aggressive limiting (e.g. 50); increase to be more lenient.
+  cpu_quota_throttled: 70
+
+  # CPU quota (%) for the slice when no throttling is active (effectively unlimited).
+  cpu_quota_normal: 100
+
+  # IO weight for throttled processes (1–10000, default kernel weight is 100).
+  # 10 = heavily de-prioritised I/O; increase toward 100 for lighter throttling.
+  io_weight_throttled: 10
+
+  # IO weight when not throttled (restore to normal kernel default).
+  io_weight_normal: 100
+
+
+# -----------------------------------------------------------------------------
+# EXCLUSIONS
+#
+# Fine-grained control over which processes ProcessSentry will never touch,
+# recognise as gaming, or treat as kernel/system infrastructure.
+#
+# All matching is case-insensitive prefix matching on the process name
+# (not the full command line), except gaming_markers which also searches cmdline.
+# -----------------------------------------------------------------------------
+exclusions:
+
+  # Processes whose names START WITH any of these strings are completely ignored.
+  # They will never be throttled, even if they peg a CPU core.
+  # Add display servers, audio daemons, DE components, and critical services here.
+  never_touch_prefixes:
+    # --- Init and session management ---
+    - systemd          # PID 1 and all systemd helper processes
+    - login            # getty / login sessions
+    - sshd             # SSH daemon — never lock yourself out remotely
+
+    # --- Audio / video pipelines ---
+    - pipewire         # PipeWire audio/video server
+    - wireplumber      # PipeWire session manager
+    - pulseaudio       # Legacy PulseAudio (if still in use)
+    - jackd            # JACK audio server (studios / low-latency audio)
+
+    # --- Display servers and compositors ---
+    - Xorg             # X11 server
+    - Xwayland         # X11 compatibility layer under Wayland
+    - wayland          # Wayland compositor base processes
+    - kwin             # KDE Plasma compositor
+    - kwin_wayland
+    - kwin_x11
+    - mutter           # GNOME compositor
+    - muffin           # Cinnamon compositor
+
+    # --- Desktop environments ---
+    - gnome-shell      # GNOME shell
+    - gnome-session
+    - plasmashell      # KDE Plasma shell
+    - cinnamon         # Cinnamon DE
+    - xfwm4            # XFCE window manager
+    - openbox
+    - i3               # i3 window manager
+    - sway             # Sway (Wayland i3)
+
+    # --- IPC / hardware daemons ---
+    - dbus             # D-Bus message broker
+    - dbus-daemon
+    - dbus-broker
+    - udevd            # udev device manager
+    - udev
+    - irqbalance       # IRQ load balancer — critical for performance
+    - thermald         # Intel thermal daemon
+    - rtkit-daemon     # Realtime scheduling broker
+
+    # --- Networking ---
+    - NetworkManager
+    - wpa_supplicant
+    - dhcpcd
+    - dhclient
+    - resolved         # systemd-resolved
+    - networkd         # systemd-networkd
+
+    # --- Display managers ---
+    - gdm              # GNOME display manager
+    - sddm             # KDE display manager
+    - lightdm
+    - xdm
+
+    # --- Steam / gaming infrastructure (non-game processes) ---
+    - steamwebhelper   # Steam browser helper — needs to stay snappy
+    - steam            # Steam client itself (game processes excluded via gaming_markers)
+
+    # --- Security and remote access ---
+    - polkit           # Privilege escalation broker
+    - policykit
+    - gpg-agent
+    - ssh-agent
+    - keyring          # GNOME / KDE keyring
+
+    # --- Accessibility ---
+    - at-spi           # Assistive Technology SPI
+
+  # Strings searched in both process name and full command line.
+  # Any process matching a gaming marker is classified as GAMING and
+  # completely excluded from throttling for the duration of the session.
+  # GameMode is also requested automatically when a gaming process is detected.
+  gaming_markers:
+    - steam            # Steam games and helpers
+    - proton           # Proton compatibility layer
+    - wine             # Wine / WINE64
+    - wineserver
+    - gamescope        # Valve gamescope compositor
+    - mangohud         # MangoHud overlay
+    - gameoverlayrenderer  # Steam overlay renderer
+    - .exe             # Windows binaries running under Proton/Wine
+    - lutris           # Lutris game manager
+    - heroic           # Heroic Games Launcher (Epic/GOG)
+    - bottles          # Bottles Wine manager
+    - gamemode         # GameMode daemon itself
+    - gamemoded
+
+  # Kernel threads and init infrastructure — always treated as SYSTEM class
+  # and given a 1.5× threshold multiplier. Do not put user processes here.
+  system_critical:
+    - init
+    - kernel
+    - kthread
+    - migration
+    - rcu_
+    - ksoftirq
+    - kworker
+    - kswapd
+    - khugepaged
+    - kcompactd
+    - watchdog
+
+
+# -----------------------------------------------------------------------------
+# LOGGING
+#
+# Controls verbosity of /var/log/process-sentry.log.
+# Valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+#
+# Note: The log format and file path are compiled into the daemon. This section
+# is provided for documentation purposes; the daemon currently reads the log
+# level from this key if you add runtime support, otherwise change the
+# basicConfig call in the source.
+# -----------------------------------------------------------------------------
+logging:
+  # Set to DEBUG to see every throttle/unthrottle event and prediction decision.
+  # Use INFO for normal production operation.
+  # Use WARNING to only log anomalies and errors.
+  level: INFO
+
+
+# -----------------------------------------------------------------------------
+# ADVANCED TUNING (optional)
+#
+# These keys are not read by the v3 source by default but are reserved for
+# future use or custom patches. Documented here for operators who extend the
+# daemon.
+# -----------------------------------------------------------------------------
+advanced:
+  # How old (seconds) a process entry must be before its metrics are pruned
+  # from the in-memory cache. Prevents unbounded memory growth on long-lived
+  # systems with many short-lived processes.
+  stale_metrics_age: 300
+
+  # How often (seconds) habit scores are flushed to /var/lib/process-sentry/habits.yaml
+  # Shorter = less data lost on crash; longer = less disk write pressure.
+  habit_save_interval: 180
+
+  # How often (seconds) stale metrics cleanup runs.
+  metrics_cleanup_interval: 60
+
+  # Nice value applied to throttled processes (0 = normal, 19 = lowest priority).
+  # Default is 15 which is aggressive but leaves some CPU headroom.
+  throttle_nice: 15
+
+  # ionice class for throttled processes.
+  # 0=none, 1=realtime, 2=best-effort, 3=idle
+  # 2 (best-effort) at priority 7 is the default — safe for most workloads.
+  throttle_ionice_class: 2
+  throttle_ionice_priority: 7
+
+  # Load EMA percentage above which the daemon switches to minimum poll interval.
+  high_load_threshold: 80
+
+  # Load EMA percentage below which the daemon relaxes to maximum poll interval.
+  low_load_threshold: 20

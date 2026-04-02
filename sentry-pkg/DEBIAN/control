@@ -1,0 +1,10 @@
+Package: process-sentry
+Version: 3.0.0
+Section: utils
+Priority: optional
+Architecture: all
+Maintainer: Bobby Comet
+Depends: python3, python3-psutil, python3-yaml
+Description: Process Sentry v3
+ A predictive system performance guardian that uses ML-based 
+ behavior patterns to manage resource-heavy processes.

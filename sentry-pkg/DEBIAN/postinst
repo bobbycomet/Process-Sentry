@@ -1,0 +1,6 @@
+#!/bin/bash
+set -e
+systemctl daemon-reload
+systemctl enable resource-sentry.service
+systemctl start resource-sentry.service
+echo "ProcessSentry v3 has been installed and started."
