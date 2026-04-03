@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://github.com/bobbycomet/Process-Sentry/blob/main/sentry.png/blob/main/sentry.png?raw=true" width="50%">
+  <img src="https://github.com/bobbycomet/Process-Sentry/blob/main/sentry.png?raw=true" width="50%">
 </p>
 
 # Process Sentry v3
