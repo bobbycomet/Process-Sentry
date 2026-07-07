@@ -503,3 +503,5 @@ prediction:
 - **Secondary predictive trigger** — In addition to the habit-score threshold, a process is now pre-emptively throttled if its recent CPU history average exceeds 80% of the current threshold — catching processes that are clearly trending toward a spike before their habit score has had time to build up.
 - **`memory.high` floor** — When `memory_high_percent` is set, the computed byte value is floored at 256 MiB to prevent the throttled slice from being made so small that normal processes inside it thrash constantly.
 - **Expanded default exclusion list** — The built-in `never_touch_prefixes` list now covers a much broader range of common applications out of the box, including IDEs, creative tools, communication apps, browsers, terminals, and system monitors, so fewer users need to manually add exclusions.
+
+Process Sentry (aka Sentry) is part of the Griffin Linux project. The name Process Sentry, the Griffin Linux name, and associated icons are protected under the GPLv3 to preserve the integrity of the branding in all distributed versions.
