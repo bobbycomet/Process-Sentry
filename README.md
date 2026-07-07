@@ -504,4 +504,16 @@ prediction:
 - **`memory.high` floor** — When `memory_high_percent` is set, the computed byte value is floored at 256 MiB to prevent the throttled slice from being made so small that normal processes inside it thrash constantly.
 - **Expanded default exclusion list** — The built-in `never_touch_prefixes` list now covers a much broader range of common applications out of the box, including IDEs, creative tools, communication apps, browsers, terminals, and system monitors, so fewer users need to manually add exclusions.
 
+## Community and Support
+
+- **Discord:** [Join Here](https://discord.gg/7fEt5W7DPh)
+- **Patreon (Beta Builds):** [Patreon](https://www.patreon.com/c/BobbyComet/membership)
+- **Support the Griffin Project:** [Ko-fi](https://ko-fi.com/bobby60908)
+
+<div align="center">
+  <img src="https://raw.githubusercontent.com/bobbycomet/Appify/main/Griffin-G.png" alt="Griffin Linux" width="15%"/>
+  <p><strong>Griffin Linux. Where power meets simplicity.</strong><br/>
+  Made with Windows switchers in mind. Built for everyone who wants a better PC.</p>
+</div>
+
 Process Sentry (aka Sentry) is part of the Griffin Linux project. The name Process Sentry, the Griffin Linux name, and associated icons are protected under the GPLv3 to preserve the integrity of the branding in all distributed versions.
