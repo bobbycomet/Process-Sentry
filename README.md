@@ -504,6 +504,16 @@ prediction:
 - **`memory.high` floor** — When `memory_high_percent` is set, the computed byte value is floored at 256 MiB to prevent the throttled slice from being made so small that normal processes inside it thrash constantly.
 - **Expanded default exclusion list** — The built-in `never_touch_prefixes` list now covers a much broader range of common applications out of the box, including IDEs, creative tools, communication apps, browsers, terminals, and system monitors, so fewer users need to manually add exclusions.
 
+Process Sentry (Sentry) is licensed under the GPLv3, and forks and derivative projects are welcome.
+
+If you build on Process Sentry (Sentry), please:
+
+- Keep the GPLv3 license terms intact.
+- Give appropriate credit to the original Process Sentry (Sentry) project.
+- Include a link back to this repository where practical.
+
+If you're building something cool with it, I'd love to hear about it!
+
 ## Community and Support
 
 - **Discord:** [Join Here](https://discord.gg/7fEt5W7DPh)
@@ -516,4 +526,6 @@ prediction:
   Made with Windows switchers in mind. Built for everyone who wants a better PC.</p>
 </div>
 
-Process Sentry (aka Sentry) is part of the Griffin Linux project. The name Process Sentry, the Griffin Linux name, and associated icons are protected under the GPLv3 to preserve the integrity of the branding in all distributed versions.
+The Process Sentry (Sentry) and Griffin Linux names, logos, and branding are not covered by the GPL license and may not be used to imply endorsement 
+or official affiliation without permission. Forks are encouraged, but please rename and rebrand modified versions unless you've 
+received permission to use the original branding.
