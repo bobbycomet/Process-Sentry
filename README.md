@@ -2,7 +2,7 @@
   <img src="https://github.com/bobbycomet/Process-Sentry/blob/main/sentry.png?raw=true" width="50%">
 </p>
 
-# Process Sentry v3.1.0
+# Process Sentry v3.2.0
 
 A predictive, adaptive process priority daemon for Linux.
 
@@ -17,10 +17,10 @@ ProcessSentry quietly watches your system in the background and automatically th
 
 ### Install the .deb package (recommended)
 
-[**Download sentry-pkg.deb**](https://github.com/bobbycomet/Process-Sentry/releases/download/v3.1.0/sentry-pkg.deb)
+[**Download sentry_3.2.0.deb**](https://github.com/bobbycomet/Process-Sentry/releases/download/v3.2.0/sentry_3.2.0.deb)
 
 ```bash
-sudo apt install ./sentry-pkg.deb
+sudo apt install ./sentry_3.2.0.deb
 ```
 
 Or open the .deb file with your distro's graphical package manager (GDebi, Discover, GNOME Software) and click Install. The service starts automatically and runs in the background from now on.
@@ -28,7 +28,7 @@ Or open the .deb file with your distro's graphical package manager (GDebi, Disco
 ### Check that it's running
 
 ```bash
-systemctl status process-sentry
+systemctl status resource-sentry
 ```
 
 You should see `active (running)`. ProcessSentry is now protecting your system; no further configuration is required for most users.
@@ -36,8 +36,8 @@ You should see `active (running)`. ProcessSentry is now protecting your system; 
 ### Stop or disable it
 
 ```bash
-sudo systemctl stop process-sentry      # stop until next reboot
-sudo systemctl disable process-sentry   # don't start on boot
+sudo systemctl stop resource-sentry      # stop until next reboot
+sudo systemctl disable resource-sentry   # don't start on boot
 ```
 
 ### Temporarily pause throttling (kill switch)
@@ -105,7 +105,7 @@ sudo nano /etc/process-sentry/config.yaml
 After saving, restart the service for changes to take effect:
 
 ```bash
-sudo systemctl restart process-sentry
+sudo systemctl restart resource-sentry
 ```
 
 A fully-documented example `config.yaml` is included in the package. The sections are:
@@ -276,7 +276,7 @@ To reset all learned habits:
 
 ```bash
 sudo rm /var/lib/process-sentry/habits.yaml
-sudo systemctl restart process-sentry
+sudo systemctl restart resource-sentry
 ```
 
 To inspect current habits:
@@ -341,7 +341,7 @@ sudo pacman -S python-yaml python-psutil
 ### Install the script
 
 ```bash
-sudo cp sentryv3.py /usr/local/bin/sentryv3.py
+sudo cp sentry-pkg/usr/local/bin/sentryv3.py /usr/local/bin/sentryv3.py
 sudo chmod +x /usr/local/bin/sentryv3.py
 ```
 
@@ -350,34 +350,18 @@ sudo chmod +x /usr/local/bin/sentryv3.py
 ```bash
 sudo mkdir -p /etc/process-sentry
 sudo mkdir -p /var/lib/process-sentry
-sudo cp config.yaml /etc/process-sentry/config.yaml
+sudo cp sentry-pkg/etc/process-sentry/config.yaml /etc/process-sentry/config.yaml
 ```
 
 ### Install and enable the systemd service
 
-Save the following as `/etc/systemd/system/process-sentry.service`:
-
-```ini
-[Unit]
-Description=Process Sentry v3
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/bin/python3 /usr/local/bin/sentryv3.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-Then enable and start it:
+Install the included service definition:
 
 ```bash
+sudo cp sentry-pkg/etc/systemd/system/resource-sentry.service /etc/systemd/system/
 sudo systemctl daemon-reload
-sudo systemctl enable process-sentry
-sudo systemctl start process-sentry
+sudo systemctl enable resource-sentry
+sudo systemctl start resource-sentry
 ```
 
 ---
@@ -389,7 +373,7 @@ sudo systemctl start process-sentry
 Stop the service first so they don't conflict:
 
 ```bash
-sudo systemctl stop process-sentry
+sudo systemctl stop resource-sentry
 sudo python3 /usr/local/bin/sentryv3.py
 ```
 
@@ -457,7 +441,9 @@ prediction:
 | `/var/log/process-sentry.log` | Log file |
 | `/run/process-sentry.pid` | PID file (auto-managed) |
 | `/etc/no-auto-throttle` | Kill switch — create to pause, delete to resume |
-| `/etc/systemd/system/process-sentry.service` | Systemd service unit |
+| `/etc/systemd/system/resource-sentry.service` | Systemd service unit |
+| `/etc/init.d/resource-sentry` | OpenRC service script |
+| `/etc/sv/resource-sentry/` | runit service scripts |
 
 ---
 
@@ -478,6 +464,15 @@ prediction:
 **An Appify PWA is being throttled** — Ensure `appify_exempt: true` is set in your config (it is by default). If the issue persists, check that the app's browser process has `~/.pwa_manager/profiles/` in its command line with `ps aux | grep pwa_manager`.
 
 ---
+
+## What's New in v3.2.0
+
+- **Per-command habit tracking** — Habit scores now distinguish processes with the same executable name but different command lines.
+- **Selectable CPU counting** — Set `thresholds.cpu_count_mode` to `physical` (default) or `logical` to choose how per-process CPU usage is normalized.
+- **Cgroup status reporting** — The daemon writes cgroup setup or fallback details to `/var/lib/process-sentry/status.json`.
+- **Multiple init systems** — The package now includes updated systemd, OpenRC, and runit service definitions.
+
+See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
 ## What's New in v3.1.0
 

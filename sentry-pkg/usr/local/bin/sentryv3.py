@@ -22,6 +22,8 @@ import psutil
 import signal
 import atexit
 import logging
+import hashlib
+import json
 import platform
 import subprocess
 from pathlib import Path
@@ -54,6 +56,8 @@ DEFAULT_CONFIG = {
         "io_mbps": 25.0,
         "memory_percent": 18.0,
         "memory_pressure_avg10": 10.0,  # PSI threshold
+        # physical (default) = historical; logical = count SMT threads (avoids under-report)
+        "cpu_count_mode": "physical",
     },
     "prediction": {
         "history_size": 10,
@@ -239,15 +243,23 @@ class ProcessSentry:
         self.gaming_markers = [m.lower() for m in self.config["exclusions"]["gaming_markers"]]
         self.system_critical = [s.lower() for s in self.config["exclusions"]["system_critical"]]
         
-        # CPU info (cache this)
-        self.cpu_count = psutil.cpu_count(logical=False) or psutil.cpu_count() or 1
+        # CPU divisor for percent. Config: thresholds.cpu_count_mode = physical|logical
+        mode = (self.config.get("thresholds") or {}).get("cpu_count_mode", "physical")
+        if mode == "logical":
+            self.cpu_count = psutil.cpu_count(logical=True) or 1
+        else:
+            self.cpu_count = psutil.cpu_count(logical=False) or psutil.cpu_count(logical=True) or 1
+        self.cpu_count_mode = mode
         
         self.detect_mode()
         self.setup_cgroup()
         self.write_pid()
         self.register_cleanup()
         
-        logging.info(f"ProcessSentry v3 started — mode={self.mode.value}, cores={self.cpu_count}")
+        logging.info(
+            f"ProcessSentry v3 started — mode={self.mode.value}, "
+            f"cores={self.cpu_count} ({self.cpu_count_mode})"
+        )
 
     def detect_mode(self):
         prev_mode = getattr(self, "mode", None)
@@ -297,9 +309,29 @@ class ProcessSentry:
     def is_never_touch(self, name_lower: str) -> bool:
         return any(name_lower.startswith(prefix) for prefix in self.never_touch)
 
+    def habit_key(self, proc: psutil.Process, name_lower: str) -> str:
+        """name + short cmdline hash — reduces collisions for short process names."""
+        try:
+            cmd = " ".join(proc.cmdline() or [])[:200]
+        except Exception:
+            cmd = ""
+        if not cmd:
+            return name_lower
+        h = hashlib.sha1(cmd.encode("utf-8", errors="replace")).hexdigest()[:10]
+        return f"{name_lower}#{h}"
+
     # -------------------------
     # Cgroup v2 Setup
     # -------------------------
+    def _write_cgroup_status(self, mode: str, detail: str = ""):
+        """Hub reads /var/lib/process-sentry/status.json to show cgroup fallback."""
+        try:
+            path = Path("/var/lib/process-sentry/status.json")
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(json.dumps({"cgroup": mode, "detail": detail}))
+        except Exception:
+            pass
+
     def setup_cgroup(self):
         """Setup cgroup v2 with CPU and IO controls"""
         self.cgroup_path = None
@@ -333,9 +365,11 @@ class ProcessSentry:
             self.apply_cgroup_limits(throttled=True)
             
             logging.info(f"cgroup v2 initialized: {self.cgroup_path}")
+            self._write_cgroup_status("v2", str(self.cgroup_path))
         except Exception as e:
             logging.warning(f"cgroup setup failed, using nice/ionice: {e}")
             self.cgroup_path = None
+            self._write_cgroup_status("fallback_nice_ionice", str(e)[:200])
 
     def apply_cgroup_limits(self, throttled: bool = True):
         """Apply CPU and IO limits to the cgroup"""
@@ -368,9 +402,9 @@ class ProcessSentry:
     # -------------------------
     # Prediction and Analysis
     # -------------------------
-    def should_pre_throttle(self, pid: int, name_lower: str) -> bool:
+    def should_pre_throttle(self, pid: int, name_lower: str, hkey: str | None = None) -> bool:
         """Predict if process will need throttling based on history"""
-        habit = self.habits.get(name_lower, 0.0)
+        habit = self.habits.get(hkey or name_lower, self.habits.get(name_lower, 0.0))
         
         # Strong habit pattern
         if habit > self.pre_throttle_confidence:
@@ -578,8 +612,9 @@ class ProcessSentry:
                     # Update metrics
                     self.update_metrics(pid, cpu_percent, io_bps, mem)
                     
-                    # Habit factor
-                    habit = self.habits.get(name_lower, 0.0)
+                    # Habit factor (name#cmdline-hash key; falls back to bare name)
+                    hkey = self.habit_key(proc, name_lower)
+                    habit = self.habits.get(hkey, self.habits.get(name_lower, 0.0))
                     factor = max(0.3, 1.0 - habit)  # More aggressive reduction
                     
                     # System class gets more lenient thresholds
@@ -595,18 +630,18 @@ class ProcessSentry:
                     )
                     
                     # Predictive throttling
-                    if not overloaded and self.should_pre_throttle(pid, name_lower):
+                    if not overloaded and self.should_pre_throttle(pid, name_lower, hkey):
                         overloaded = True
                         logging.debug(f"Pre-throttling {name_lower}[{pid}] (predicted)")
                     
                     # Apply throttling decision (batched)
                     if overloaded:
-                        batch_throttle.append((proc, name_lower))
+                        batch_throttle.append((proc, name_lower, hkey))
                     else:
                         if pid in self.throttled:
                             batch_unthrottle.append(proc)
                         # Decay habit slowly when behaving
-                        self.habits[name_lower] = max(0.0, habit - self.learn_down)
+                        self.habits[hkey] = max(0.0, habit - self.learn_down)
                 
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     self.throttled.discard(pid)
@@ -617,10 +652,10 @@ class ProcessSentry:
                     logging.debug(f"Error processing PID {pid}: {e}")
             
             # Batch apply throttling
-            for proc, name_lower in batch_throttle:
+            for proc, name_lower, hkey in batch_throttle:
                 self.throttle(proc)
-                habit = self.habits.get(name_lower, 0.0)
-                self.habits[name_lower] = min(self.habit_cap, habit + self.learn_up)
+                habit = self.habits.get(hkey, self.habits.get(name_lower, 0.0))
+                self.habits[hkey] = min(self.habit_cap, habit + self.learn_up)
             
             for proc in batch_unthrottle:
                 self.unthrottle(proc)
