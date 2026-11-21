@@ -70,6 +70,10 @@ thresholds:
   # Requires kernel 4.20+ with CONFIG_PSI=y.
   memory_pressure_avg10: 10.0
 
+  # CPU count used to normalize per-process CPU usage: physical or logical.
+  # Logical includes SMT threads; physical preserves the historical default.
+  cpu_count_mode: physical
+
 
 # -----------------------------------------------------------------------------
 # PREDICTIVE THROTTLING
