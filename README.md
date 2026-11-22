@@ -2,7 +2,7 @@
   <img src="https://github.com/bobbycomet/Process-Sentry/blob/main/sentry.png?raw=true" width="50%">
 </p>
 
-# Process Sentry v3.2.0
+# Process Sentry v3.2.1
 
 A predictive, adaptive process priority daemon for Linux.
 
@@ -17,13 +17,15 @@ ProcessSentry quietly watches your system in the background and automatically th
 
 ### Install the .deb package (recommended)
 
-[**Download sentry_3.2.0.deb**](https://github.com/bobbycomet/Process-Sentry/releases/download/v3.2.0/sentry_3.2.0.deb)
+[**Download sentry_3.2.1.deb**](https://github.com/bobbycomet/Process-Sentry/releases/download/v3.2.1/sentry_3.2.1.deb)
 
 ```bash
-sudo apt install ./sentry_3.2.0.deb
+sudo apt install ./sentry_3.2.1.deb
 ```
 
 Or open the .deb file with your distro's graphical package manager (GDebi, Discover, GNOME Software) and click Install. The service starts automatically and runs in the background from now on.
+
+The Debian package uses systemd only. OpenRC users can [download the standalone OpenRC service script](https://github.com/bobbycomet/Process-Sentry/releases/download/v3.2.1/resource-sentry.openrc); it is not installed by the `.deb`.
 
 ### Check that it's running
 
@@ -442,8 +444,7 @@ prediction:
 | `/run/process-sentry.pid` | PID file (auto-managed) |
 | `/etc/no-auto-throttle` | Kill switch — create to pause, delete to resume |
 | `/etc/systemd/system/resource-sentry.service` | Systemd service unit |
-| `/etc/init.d/resource-sentry` | OpenRC service script |
-| `/etc/sv/resource-sentry/` | runit service scripts |
+| `packaging/openrc/resource-sentry.openrc` | Standalone OpenRC service script (not included in the `.deb`) |
 
 ---
 
@@ -465,12 +466,17 @@ prediction:
 
 ---
 
+## What's New in v3.2.1
+
+- **Systemd-only Debian package** — Remove the OpenRC `/etc/init.d` and runit scripts from the `.deb`, so Debian/Ubuntu package configuration enables the systemd unit without passing an OpenRC script to `update-rc.d`.
+- **Standalone OpenRC download** — Keep the OpenRC service script available as a separate release asset for OpenRC systems.
+
 ## What's New in v3.2.0
 
 - **Per-command habit tracking** — Habit scores now distinguish processes with the same executable name but different command lines.
 - **Selectable CPU counting** — Set `thresholds.cpu_count_mode` to `physical` (default) or `logical` to choose how per-process CPU usage is normalized.
 - **Cgroup status reporting** — The daemon writes cgroup setup or fallback details to `/var/lib/process-sentry/status.json`.
-- **Multiple init systems** — The package now includes updated systemd, OpenRC, and runit service definitions.
+- **Systemd service updates** — The Debian package installs the systemd service.
 
 See [CHANGELOG.md](CHANGELOG.md) for the full release history.
 
